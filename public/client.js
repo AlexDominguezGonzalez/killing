@@ -9,7 +9,7 @@ const SCALE = 2;                       // resolución interna x2 para textos ní
 const W = canvas.width / SCALE, H = canvas.height / SCALE;
 const FONT = '"Press Start 2P", "Courier New", monospace';
 
-let ws, myId = null, isHost = false, joined = false;
+let myId = null, isHost = false, joined = false;
 let TILE = 16, maxShots = 10, maxHp = 3;
 let mapLayer = null;                    // mapa pre-dibujado
 let prev = null, curr = null, prevT = 0, currT = 0;
@@ -55,30 +55,48 @@ const sfx = {
 // ------------------------------------------------------------
 //  Conexión WebSocket
 // ------------------------------------------------------------
-function send(obj) {
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
-}
+const LOCAL_MAP = [
+  '##############################', '#............................#', '#..##......#......#......##..#', '#..#.......#......#.......#..#', '#..........#......#..........#', '#....###..............###....#', '#............................#', '#......##....####....##......#', '#..#......................#..#', '#..#.....#..........#.....#..#', '#..#.....#..........#.....#..#', '#..#......................#..#', '#......##....####....##......#', '#............................#', '#....###..............###....#', '#..........#......#..........#', '#..#.......#......#.......#..#', '#..##......#......#......##..#', '#............................#', '##############################',
+];
+let local = null, localBullets = [];
 
-function connect() {
-  const defaultSocketUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
-  const socketUrl = window.GAME_WS_URL || (window.USE_SAME_ORIGIN_WS ? defaultSocketUrl : null);
-  if (!socketUrl) {
-    $('#offline').hidden = false;
-    return;
-  }
-  ws = new WebSocket(socketUrl);
-  ws.onopen = () => { $('#offline').hidden = true; };
-  ws.onmessage = e => {
-    const m = JSON.parse(e.data);
-    if (m.t === 'welcome') onWelcome(m);
-    else if (m.t === 'joined') onJoined(m);
-    else if (m.t === 's') onState(m);
-  };
-  ws.onclose = () => {
-    $('#offline').hidden = false;
-    joined = false;
-    setTimeout(connect, 2000);
-  };
+function send(obj) {
+  if (!local) return;
+  if (obj.t === 'in') local.input = { u: !!obj.u, d: !!obj.d, l: !!obj.l, r: !!obj.r, a: obj.a || 0 };
+  if (obj.t === 'shoot') localShoot(local.p[0], obj.a);
+}
+function localWall(x, y) {
+  const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
+  return tx < 0 || ty < 0 || tx >= 30 || ty >= 20 || LOCAL_MAP[ty][tx] === '#';
+}
+function localMove(p, dx, dy) {
+  const nx = p.x + dx, ny = p.y + dy;
+  if (!localWall(nx - 6, p.y - 6) && !localWall(nx + 6, p.y + 6)) p.x = nx;
+  if (!localWall(p.x - 6, ny - 6) && !localWall(p.x + 6, ny + 6)) p.y = ny;
+}
+function localShoot(p, a) {
+  if (!p || !p.al || !p.am || local.ph !== 'playing') return;
+  p.am--; p.a = a;
+  localBullets.push({ x: p.x, y: p.y, vx: Math.cos(a) * 6, vy: Math.sin(a) * 6, owner: p.id, life: 90 });
+  local.e.push({ k: 'shot', id: p.id });
+}
+function localStart(name) {
+  const you = { id: 1, n: name, c: '#29adff', x: 64, y: 64, a: 0, hp: 3, am: 10, k: 0, al: true, ig: true };
+  const bots = [[416, 64], [64, 256], [416, 256]].map((pos, i) => ({ id: i + 2, n: `BOT ${i + 1}`, c: ['#ff004d', '#00e436', '#ffa300'][i], x: pos[0], y: pos[1], a: Math.PI, hp: 3, am: 10, k: 0, al: true, ig: true, nextShot: 0 }));
+  local = { ph: 'playing', p: [you, ...bots], b: [], e: [], z: 999, zt: 0, w: '', input: {} };
+  onState(local);
+}
+function localTick() {
+  if (!local || local.ph !== 'playing') return;
+  const you = local.p[0], input = local.input;
+  if (you.al) { let dx = (input.r ? 1 : 0) - (input.l ? 1 : 0), dy = (input.d ? 1 : 0) - (input.u ? 1 : 0); if (dx || dy) { const d = Math.hypot(dx, dy); localMove(you, dx / d * 2.2, dy / d * 2.2); } you.a = input.a || you.a; }
+  const now = performance.now();
+  for (const bot of local.p.slice(1)) { if (!bot.al || !you.al) continue; const a = Math.atan2(you.y - bot.y, you.x - bot.x), d = Math.hypot(you.x - bot.x, you.y - bot.y); bot.a = a; if (d > 105) localMove(bot, Math.cos(a) * 1.25, Math.sin(a) * 1.25); if (bot.am && now > bot.nextShot && d < 190) { localShoot(bot, a + (Math.random() - .5) * .22); bot.nextShot = now + 900 + Math.random() * 900; } }
+  for (const b of localBullets) { b.x += b.vx; b.y += b.vy; b.life--; }
+  for (const b of localBullets.filter(b => b.life > 0 && !localWall(b.x, b.y))) for (const p of local.p) if (p.al && p.id !== b.owner && Math.hypot(p.x - b.x, p.y - b.y) <= 10) { p.hp--; b.life = 0; local.e.push({ k: 'hit', id: p.id }); if (p.hp <= 0) { p.al = false; const killer = local.p.find(q => q.id === b.owner); if (killer) killer.k++; local.e.push({ k: 'kill', id: p.id, killer: killer ? killer.n : 'NADIE', victim: p.n }); } }
+  localBullets = localBullets.filter(b => b.life > 0 && !localWall(b.x, b.y)); local.b = localBullets.map(b => [b.x, b.y]);
+  const alive = local.p.filter(p => p.al); if (alive.length <= 1) { local.ph = 'ended'; local.w = alive[0] ? alive[0].n : ''; local.e.push({ k: 'end', winner: local.w }); }
+  onState(local); local.e = [];
 }
 
 function onWelcome(m) {
@@ -121,6 +139,7 @@ function onJoined(m) {
   } catch {}
   $('#hostJoinForm').hidden = true;
   showScreen('game');
+  localStart(m.name);
 }
 
 function showScreen(id) {
@@ -557,5 +576,6 @@ function drawOverlay(m) {
   }
 }
 
-connect();
+onWelcome({ id: 1, isHost: false, tile: 16, maxShots: 10, maxHp: 3, map: LOCAL_MAP, ips: ['PARTIDA LOCAL'], port: '' });
+setInterval(localTick, 1000 / 30);
 render();

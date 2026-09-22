@@ -1,3 +1,9 @@
-// Vercel admite exportar un servidor HTTP de Node.js. server.js añade tanto
-// las rutas HTTP como el servidor WebSocket al mismo servidor.
-module.exports = require('./server');
+const express = require('express');
+const path = require('path');
+
+const app = express();
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+module.exports = app;
