@@ -55,6 +55,7 @@ body::after {
 .title span { color: var(--line); }
 
 .blink { animation: blink 1s steps(1) infinite; color: var(--accent); }
+.connection-status { max-width: 620px; color: var(--red); font-size: 10px; line-height: 1.8; }
 @keyframes blink { 50% { opacity: 0; } }
 
 .box {

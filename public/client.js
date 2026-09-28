@@ -99,6 +99,7 @@ function localTick() {
 }
 
 function onWelcome(m) {
+  $('#connectionStatus').hidden = true;
   myId = m.id;
   isHost = m.isHost;
   TILE = m.tile;
@@ -141,8 +142,14 @@ function onJoined(m) {
 }
 
 async function connect() {
+  showScreen('join');
   try {
     const config = await fetch('/api/config', { cache: 'no-store' }).then(r => r.json());
+    if (!config.wsUrl && location.protocol === 'https:') {
+      $('#connectionStatus').textContent = 'Falta configurar GAME_WS_URL en Vercel con la dirección wss:// del servidor del juego.';
+      setTimeout(connect, 3000);
+      return;
+    }
     const endpoint = config.wsUrl || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
     const url = new URL(endpoint);
     const hostToken = new URLSearchParams(location.search).get('host');
@@ -155,9 +162,13 @@ async function connect() {
       else if (message.t === 'joined') onJoined(message);
       else if (message.t === 's') onState(message);
     });
-    socket.addEventListener('close', () => setTimeout(connect, 2000));
+    socket.addEventListener('close', () => {
+      if (!joined) $('#connectionStatus').textContent = 'No se pudo conectar con el servidor. Comprueba que esté iniciado y que GAME_WS_URL sea correcto.';
+      setTimeout(connect, 2000);
+    });
     socket.addEventListener('error', () => socket.close());
   } catch {
+    $('#connectionStatus').textContent = 'No se pudo leer la configuración del servidor. Reintentando…';
     setTimeout(connect, 2000);
   }
 }
