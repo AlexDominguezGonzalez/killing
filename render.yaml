@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: 8bits-battle-server
+    runtime: node
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST_TOKEN
+        generateValue: true

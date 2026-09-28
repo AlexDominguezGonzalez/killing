@@ -10,6 +10,7 @@ const W = canvas.width / SCALE, H = canvas.height / SCALE;
 const FONT = '"Press Start 2P", "Courier New", monospace';
 
 let myId = null, isHost = false, joined = false;
+let socket = null;
 let TILE = 16, maxShots = 10, maxHp = 3;
 let mapLayer = null;                    // mapa pre-dibujado
 let prev = null, curr = null, prevT = 0, currT = 0;
@@ -61,9 +62,7 @@ const LOCAL_MAP = [
 let local = null, localBullets = [];
 
 function send(obj) {
-  if (!local) return;
-  if (obj.t === 'in') local.input = { u: !!obj.u, d: !!obj.d, l: !!obj.l, r: !!obj.r, a: obj.a || 0 };
-  if (obj.t === 'shoot') localShoot(local.p[0], obj.a);
+  if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(obj));
 }
 function localWall(x, y) {
   const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
@@ -113,7 +112,7 @@ function onWelcome(m) {
   const ips = m.ips.length ? m.ips : [location.hostname];
   for (const ip of ips) {
     const d = document.createElement('div');
-    d.textContent = `${ip}:${m.port}`;
+    d.textContent = m.port ? `${ip}:${m.port}` : ip;
     list.appendChild(d);
   }
 
@@ -139,7 +138,28 @@ function onJoined(m) {
   } catch {}
   $('#hostJoinForm').hidden = true;
   showScreen('game');
-  localStart(m.name);
+}
+
+async function connect() {
+  try {
+    const config = await fetch('/api/config', { cache: 'no-store' }).then(r => r.json());
+    const endpoint = config.wsUrl || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
+    const url = new URL(endpoint);
+    const hostToken = new URLSearchParams(location.search).get('host');
+    if (hostToken) url.searchParams.set('host', hostToken);
+    socket = new WebSocket(url);
+    socket.addEventListener('message', event => {
+      let message;
+      try { message = JSON.parse(event.data); } catch { return; }
+      if (message.t === 'welcome') onWelcome(message);
+      else if (message.t === 'joined') onJoined(message);
+      else if (message.t === 's') onState(message);
+    });
+    socket.addEventListener('close', () => setTimeout(connect, 2000));
+    socket.addEventListener('error', () => socket.close());
+  } catch {
+    setTimeout(connect, 2000);
+  }
 }
 
 function showScreen(id) {
@@ -576,6 +596,5 @@ function drawOverlay(m) {
   }
 }
 
-onWelcome({ id: 1, isHost: false, tile: 16, maxShots: 10, maxHp: 3, map: LOCAL_MAP, ips: ['PARTIDA LOCAL'], port: '' });
-setInterval(localTick, 1000 / 30);
+connect();
 render();

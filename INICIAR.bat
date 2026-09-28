@@ -6,5 +6,5 @@ if not exist node_modules (
   call npm install --no-audit --no-fund
 )
 start "" http://localhost:3000
-node server.js
+call npm run dev
 pause

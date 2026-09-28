@@ -279,6 +279,10 @@ const STATIC = {
 };
 
 const server = http.createServer((req, res) => {
+  if (req.url.split('?')[0] === '/api/config') {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify({ wsUrl: process.env.GAME_WS_URL || '' }));
+  }
   const file = STATIC[req.url.split('?')[0]];
   if (!file) { res.writeHead(404); return res.end('No encontrado'); }
   fs.readFile(path.join(__dirname, 'public', file[0]), (err, data) => {
@@ -290,10 +294,12 @@ const server = http.createServer((req, res) => {
 
 // ---------- WebSockets ----------
 const wss = new WebSocketServer({ server, maxPayload: 1024 });
+const hostToken = process.env.HOST_TOKEN || '';
 
 wss.on('connection', (ws, req) => {
   const addr = req.socket.remoteAddress || '';
-  const isHost = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr);
+  const requestedToken = new URL(req.url, 'http://localhost').searchParams.get('host') || '';
+  const isHost = hostToken ? requestedToken === hostToken : ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr);
   const p = {
     id: nextId++, ws, name: '', joined: false, isHost,
     color: COLORS[colorIdx++ % COLORS.length],
@@ -303,7 +309,7 @@ wss.on('connection', (ws, req) => {
   players.set(p.id, p);
 
   ws.send(JSON.stringify({
-    t: 'welcome', id: p.id, isHost, ips: lanIPs(), port: PORT,
+    t: 'welcome', id: p.id, isHost, ips: process.env.RENDER ? [] : lanIPs(), port: process.env.RENDER ? 0 : PORT,
     map: MAP, tile: TILE, maxShots: MAX_SHOTS, maxHp: MAX_HP,
   }));
 
@@ -375,5 +381,4 @@ if (require.main === module) {
   });
 }
 
-// Vercel invoca este servidor y conserva el manejador de upgrade de WebSocket.
 module.exports = server;
