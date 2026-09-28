@@ -300,7 +300,12 @@ const hostToken = process.env.HOST_TOKEN || '';
 wss.on('connection', (ws, req) => {
   const addr = req.socket.remoteAddress || '';
   const requestedToken = new URL(req.url, 'http://localhost').searchParams.get('host') || '';
-  const isHost = hostToken ? requestedToken === hostToken : ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr);
+  const isLocalHost = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr);
+  const isHost = hostToken
+    ? requestedToken === hostToken
+    : process.env.VERCEL || process.env.RENDER
+      ? false
+      : isLocalHost;
   const p = {
     id: nextId++, ws, name: '', joined: false, isHost,
     color: COLORS[colorIdx++ % COLORS.length],
