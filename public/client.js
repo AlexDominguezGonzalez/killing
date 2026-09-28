@@ -145,12 +145,13 @@ async function connect() {
   showScreen('join');
   try {
     const config = await fetch('/api/config', { cache: 'no-store' }).then(r => r.json());
-    if (!config.wsUrl && location.protocol === 'https:') {
-      $('#connectionStatus').textContent = 'Falta configurar GAME_WS_URL en Vercel con la dirección wss:// del servidor del juego.';
+    const configuredUrl = config.wsUrl || window.GAME_WS_URL || '';
+    if (!configuredUrl && location.protocol === 'https:' && !window.USE_SAME_ORIGIN_WS) {
+      $('#connectionStatus').textContent = 'Falta configurar public/config.js: pon GAME_WS_URL con la dirección wss:// del servidor del juego.';
       setTimeout(connect, 3000);
       return;
     }
-    const endpoint = config.wsUrl || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`;
+    const endpoint = configuredUrl || `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}${window.GAME_WS_PATH || '/'}`;
     const url = new URL(endpoint);
     const hostToken = new URLSearchParams(location.search).get('host');
     if (hostToken) url.searchParams.set('host', hostToken);

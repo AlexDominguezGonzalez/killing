@@ -274,6 +274,7 @@ function snapshot() {
 const STATIC = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
+  '/config.js': ['config.js', 'text/javascript; charset=utf-8'],
   '/client.js': ['client.js', 'text/javascript; charset=utf-8'],
   '/style.css': ['style.css', 'text/css; charset=utf-8'],
 };
@@ -309,7 +310,7 @@ wss.on('connection', (ws, req) => {
   players.set(p.id, p);
 
   ws.send(JSON.stringify({
-    t: 'welcome', id: p.id, isHost, ips: process.env.RENDER ? [] : lanIPs(), port: process.env.RENDER ? 0 : PORT,
+    t: 'welcome', id: p.id, isHost, ips: process.env.VERCEL || process.env.RENDER ? [] : lanIPs(), port: process.env.VERCEL || process.env.RENDER ? 0 : PORT,
     map: MAP, tile: TILE, maxShots: MAX_SHOTS, maxHp: MAX_HP,
   }));
 
